@@ -1,3 +1,14 @@
+textarea {
+    border: 0 none white;
+    min-width: 580px;
+    width: 580px;
+    height: 60px;
+    line-height: 24px;
+    min-height: 22px;
+    overflow-y: scroll;
+    padding-top: 1.1em; /* fixes text jump on Enter keypress */
+}
+
 #callButton {
   background-color: #004A7F;
   -webkit-border-radius: 10px;

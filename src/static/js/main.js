@@ -15,7 +15,8 @@ $( document ).ready(function() {
     const cameraButton = document.getElementById('cameraButton');
     const hangupButton = document.getElementById('hangupButton');
     const muteButton = document.getElementById('muteButton');
-    callButton.disabled = true;
+    const messageBox = document.getElementById('messageBox');
+    callButton.style.visibility = 'hidden';
     cameraButton.disabled = true;
     cameraButton.className = "fas fa-video-slash";
     cameraButton.style['pointer-events'] = 'none';
@@ -49,6 +50,12 @@ $( document ).ready(function() {
 
     socket.on('created or joined', function(res) {
       console.log('Peers ', res.peers, " Created or joined room ", res.sid);
+      if (res.peers[room].host === res.sid) {
+          messageBox.value += 'You are the host of the room: ' + room + '\n';
+      } else {
+          messageBox.value += res.sid + ' joind the room: ' + room + '\n';
+      }
+      messageBox.scrollTop = messageBox.scrollHeight;
       isRoomInitiated = true;
       res.peers[room].members.forEach(function(entry) {
          if (entry !== sessionId) {
@@ -81,6 +88,7 @@ $( document ).ready(function() {
       } else if (message.content.type === 'peer is ready') {
          isPeersReady[message.from] = true;
       } else if (message.content.type === 'offer') {
+         callButton.style.visibility = 'visible';
          console.log('isRoomInitiated', isRoomInitiated, 'isOfferedFrom', isOfferedFrom, 'isPeersReady', isPeersReady, 'isStartedWith', isStartedWith);
          if (isOfferedFrom[message.from]  && isPeersReady[message.from]) {
             peerConns[message.from].setRemoteDescription(new RTCSessionDescription(message.content));
@@ -96,8 +104,11 @@ $( document ).ready(function() {
           try {
             console.log('isRoomInitiated', isRoomInitiated, 'isOfferedFrom', isOfferedFrom, 'isPeersReady', isPeersReady, 'isStartedWith', isStartedWith);
             peerConns[message.from].setRemoteDescription(new RTCSessionDescription(message.content));
+            callButton.style.visibility = 'visible';
+            callButton.disabled = true;
             callButton.innerHTML = "Talking";
             isStartedWith[message.from] = true;
+            messageBox.value += message.from + ' is now in the video conference.\n';
 //            sendMessage({'from':sessionId, 'to':message.from, 'content': {type: 'responsed'}});
           } catch (e) {
             console.log("answer exception", e);
@@ -230,7 +241,19 @@ $( document ).ready(function() {
             localStream.addTrack(videoTracks[0]);
             localVideo.srcObject = localStream;
             for (key in peerConns) {
-                return peerConns[key].createOffer(setLocalAndSendMessage, handleCreateOfferError);
+               peerConns[key].createOffer(
+                  async (sessionDescription) =>  {
+                      console.log('setLocalAndSendMessage sending message', sessionDescription);
+                      await pc.setLocalDescription(sessionDescription,
+                        function() {
+                            sendMessage({'from':sessionId, 'to': key, 'content': sessionDescription});
+                            console.log("Offer setLocalDescription succeeded");
+                        },
+                        function(err) { console.log("Offer setLocalDescription failed!",err.message);
+                        });
+                  },
+                  handleCreateOfferError);
+                  console.log('Created RTCPeerConnnection ', key, " peerConns", peerConns[key]);
             }
           });
       }
@@ -340,6 +363,7 @@ $( document ).ready(function() {
         if (isOfferedFrom[key] && isPeersReady[key]) {
           doAnswer(key);
           callButton.innerHTML = "Talking";
+          messageBox.value += key + ' is now in the video conference.\n';
         }
       }
     }
