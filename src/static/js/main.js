@@ -3,7 +3,7 @@ $( document ).ready(function() {
     var isRoomInitiated = false;
     var isStartedWith = {};
     var isOfferedFrom = {};
-    var localStream;
+    var localStream = null;
     var hostId;
     var sessionId;
     var remoteVideos = {};
@@ -32,23 +32,22 @@ $( document ).ready(function() {
     cameraButton.onclick = switchCamera;
     hangupButton.onclick = hangup;
     muteButton.onclick = muteMicrophone;
+
     /////////////////////////////////////////////
-
-    room = 'foo';
-    var room = prompt('Enter room name:');
-
     var socket=io.connect(window.location.protocol+'//'+window.location.hostname+(location.port ? ':'+location.port: ''));
     socket.on('connect', function(){
        sessionId = socket.io.engine.id;
        console.log("Session id", sessionId);
     });
 
-    if (room !== '') {
-      socket.emit('created or joined', room);
-    }
+    var room = prompt('Enter room name:');
+    socket.emit('created or joined', room);
 
     socket.on('created or joined', function(res) {
-      console.log('Peers ', res.peers, " Created or joined room ", res.sid);
+      if (res.room !== room) {
+        return false;
+      }
+      console.log(" Created or joined room ", res.sid);
       if (res.peers[room].host === res.sid) {
          messageBox.value += 'You are the host of the room: ' + room + '.\n';
          hostId = res.sid;
@@ -56,7 +55,8 @@ $( document ).ready(function() {
         messageBox.value += res.sid + ' has joind the room: ' + room + '.\n';
       }
       messageBox.scrollTop = messageBox.scrollHeight;
-
+      if (res.peers[room].isActive)
+         isRoomInitiated = true;
       res.peers[room].members.forEach(function(entry) {
          if (entry !== sessionId) {
             peerConns[entry] = null;
@@ -67,7 +67,27 @@ $( document ).ready(function() {
             }
          }
       });
-      console.log("Peer Connns ",peerConns, "hostID", hostId);
+      console.log("Peer Connns ",peerConns, "room", res.room);
+    });
+
+    socket.on('created error', function(res) {
+      if (res.room !== room) {
+        return false;
+      }
+      if (res.sid === sessionId) {
+        alert(res.err);
+        room = prompt('Enter room name:');
+        socket.emit('created or joined', room);
+      }
+    });
+
+    socket.on('closed', function(res) {
+      if (res.room !== room) {
+        return false;
+      }
+      messageBox.value += 'The room is closed and down: ' + res.room + '\n';
+      console.log("Peer Connns ",peerConns, "room", res.room)
+      handleRemoteHangup();
     });
     ////////////////////////////////////////////////
 
@@ -78,7 +98,9 @@ $( document ).ready(function() {
 
     socket.on('message', function(message) {
       console.log('Client received message:', message);
-
+      if (message.room!= null && message.room!= room) {
+         return false;
+      }
       if (message.to!= null && message.to !==sessionId) {
          return false;
       }
@@ -112,7 +134,7 @@ $( document ).ready(function() {
             callButton.innerHTML = "Talking";
             isStartedWith[message.from] = true;
             messageBox.value += message.from + ' has joined the room: ' + room + '(Status: Talking...)\n';
-            sendMessage({'from':sessionId, 'to':message.from, 'content': {type: 'responsed'}});
+            sendMessage({'room':room, 'from':sessionId, 'to':message.from, 'content': {type: 'responsed'}});
           } catch (e) {
             console.log("answer exception", e);
           }
@@ -122,19 +144,18 @@ $( document ).ready(function() {
             candidate: message.content.candidate
           });
           peerConns[message.from].addIceCandidate(candidate).then(() => onAddIceCandidateSuccess(pc), err => onAddIceCandidateError(pc, err));
-      } else if (message.content.type === 'bye' && isStartedWith[message.from]) {
-         messageBox.value += sessionId + ' has left the room: ' + room + '\n';
-         remoteVideos[message.from].remove();
-         delete remoteVideos[message.from];
+      } else if (message.content.type === 'disconnected') {
+         messageBox.value += message.from + ' has left the room: ' + room + '\n';
+         if (remoteVideos[message.from]) {
+           remoteVideos[message.from].remove();
+           delete remoteVideos[message.from];
+         }
          if (peerConns[message.from]) {
            peerConns[message.from].close;
            peerConns[message.from] = null;
          }
          isOfferedFrom[message.from] = false;
          isStartedWith[message.from] = false;
-      } else if (message.content.type === 'disconnected') {
-         messageBox.value += 'The room is closed and down: ' + room + '\n';
-         handleRemoteHangup();
       } else if (message.content.type === 'responsed' && isOfferedFrom[message.from]) {
          isStartedWith[message.from] = true;
       }
@@ -193,6 +214,10 @@ $( document ).ready(function() {
        }
        if (sessionId === hostId) {
          isRoomInitiated = true;
+         hangupButton.style.background  = 'DodgerBlue';
+         hangupButton.style['pointer-events'] = 'auto';
+         hangupButton.disabled = false;
+         sendMessage({'room':room, 'from':sessionId, 'to':null, 'content': {type: 'conf is ready'}});
        }
        if (!isRoomInitiated) {
          messageBox.value += 'Conference has not been started by the host.\n';
@@ -222,7 +247,7 @@ $( document ).ready(function() {
       localVideo.srcObject = stream;
       localStream = stream;
       localStream.addTrack(videoTracks[0]);
-      sendMessage({'from':sessionId, 'to':null, 'content': {type: 'got user media'}});
+      sendMessage({'room':room, 'from':sessionId, 'to':null, 'content': {type: 'got user media'}});
     }
 
     function muteMicrophone() {
@@ -262,15 +287,14 @@ $( document ).ready(function() {
 
     function maybeStart(to) {
       console.log('>>>>>>> maybeStart() ', isStartedWith[to], localStream);
-      if (!isStartedWith[to] && typeof localStream !== 'undefined' && localStream !== null) {
+      if (!isStartedWith[to] && localStream !== null) {
         console.log('>>>>>> creating peer connections', peerConns);
         createPeerConnection(to);
       }
     }
 
     window.onbeforeunload = function() {
-      socket.emit('disconnected', room);
-      console.log("sending disconnect")
+      hangup();
     };
 
     /////////////////////////////////////////////////////////
@@ -282,6 +306,7 @@ $( document ).ready(function() {
         pc.onicecandidate = function(event) {
             if (event.candidate) {
                 sendMessage({
+                  'room':room,
                   'from': sessionId,
                   'to':to,
                   'content': {
@@ -324,7 +349,7 @@ $( document ).ready(function() {
               console.log('setLocalAndSendMessage sending message', sessionDescription);
               await pc.setLocalDescription(sessionDescription,
                 function() {
-                    sendMessage({'from':sessionId, 'to': to, 'content': sessionDescription});
+                    sendMessage({'room':room, 'from':sessionId, 'to': to, 'content': sessionDescription});
                     console.log("Offer setLocalDescription succeeded");
                 },
                 function(err) { console.log("Offer setLocalDescription failed!",err.message);
@@ -362,7 +387,7 @@ $( document ).ready(function() {
            console.log("sessionDescription is: ", sessionDescription);
            peerConns[to].setLocalDescription(sessionDescription,
               function() {
-                sendMessage({'from': sessionId, 'to': to, 'content': sessionDescription});
+                sendMessage({'room':room, 'from': sessionId, 'to': to, 'content': sessionDescription});
                 messageBox.value += sessionId + ' has joined the room: ' + room + '(Status: Talking...)\n';
                 console.log("Offer setLocalDescription succeeded");
               },
@@ -384,11 +409,10 @@ $( document ).ready(function() {
       console.log('Ending call');
       stop();
       if (sessionId === hostId) {
-         sendMessage({'from': sessionId, 'to': null, 'content': {type: 'disconnected'}});
-         messageBox.value += 'The room is closed and down: ' + room + '\n';
+         socket.emit('closed', room);
          isRoomInitiated = false;
       } else {
-         sendMessage({'from': sessionId, 'to': null, 'content': {type: 'bye'}});
+         sendMessage({'room':room, 'from': sessionId, 'to': null, 'content': {type: 'disconnected'}});
          messageBox.value += sessionId + ' has left the room: ' + room + '\n';
       }
     }
@@ -408,10 +432,13 @@ $( document ).ready(function() {
       hangupButton.style.background  = 'grey';
       hangupButton.style['pointer-events'] = 'none';
       hangupButton.disabled = true;
-      localStream.getTracks().forEach((t) => {
-        t.stop();
-      });
-      localStream = null;
+      console.log(localStream);
+      if (localStream !== null) {
+        localStream.getTracks().forEach((t) => {
+          t.stop();
+        });
+        localStream = null;
+      }
       for (key in remoteVideos) {
         remoteVideos[key].remove();
         delete remoteVideos[key];
