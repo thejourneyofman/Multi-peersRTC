@@ -7,6 +7,7 @@ $( document ).ready(function() {
     var hostId;
     var sessionId;
     var remoteVideos = {};
+    var remoteStreams = {};
     var peerConns = {};
 
     const startButton = document.getElementById('startButton');
@@ -143,12 +144,13 @@ $( document ).ready(function() {
             sdpMLineIndex: message.content.label,
             candidate: message.content.candidate
           });
-          peerConns[message.from].addIceCandidate(candidate).then(() => onAddIceCandidateSuccess(pc), err => onAddIceCandidateError(pc, err));
+          peerConns[message.from].addIceCandidate(candidate).then(() => onAddIceCandidateSuccess(peerConns[message.from]), err => onAddIceCandidateError(peerConns[message.from], err));
       } else if (message.content.type === 'disconnected') {
          messageBox.value += message.from + ' has left the room: ' + room + '\n';
          if (remoteVideos[message.from]) {
            remoteVideos[message.from].remove();
            delete remoteVideos[message.from];
+           delete remoteStreams[message.from];
          }
          if (peerConns[message.from]) {
            peerConns[message.from].close;
@@ -166,6 +168,11 @@ $( document ).ready(function() {
     var pcConfig = {
       'iceServers': [{
         'urls': 'stun:stun.l.google.com:19302'
+      },
+      {
+        'urls': 'turn:<Your EC2 Private IPs>:8888?transport=udp',
+        'username': '<username>',
+        'credential': '<credentials>'
       }]
     };
 
@@ -300,10 +307,12 @@ $( document ).ready(function() {
     /////////////////////////////////////////////////////////
 
     function createPeerConnection(to) {
+      if (peerConns[to] !== null) {
+           return false;
+      }
       try {
-        pc = new RTCPeerConnection(pcConfig);
-        peerConns[to] = pc;
-        pc.onicecandidate = function(event) {
+        peerConns[to] = new RTCPeerConnection(pcConfig);
+        peerConns[to].onicecandidate = function(event) {
             if (event.candidate) {
                 sendMessage({
                   'room':room,
@@ -321,8 +330,15 @@ $( document ).ready(function() {
             }
         };
 
-        pc.onaddstream = function(event) {
-            console.log('onaddstream Event',event);
+        peerConns[to].ontrack = function(event) {
+            console.log('ontrack Event',event);
+            if (to in remoteStreams && remoteStreams[to].id === event.streams[0].id) {
+               remoteStreams[to].addTrack(event.track);
+               remoteVideos[to].srcObject = remoteStreams[to];
+               return true;
+            }
+            remoteStreams[to] = event.streams[0];
+            remoteStreams[to].addTrack(event.track);
             hangupButton.style.background  = 'DodgerBlue';
             hangupButton.style['pointer-events'] = 'auto';
             hangupButton.disabled = false;
@@ -337,17 +353,17 @@ $( document ).ready(function() {
             $(remoteVideo).attr('margin-left', '5%');
             $("#remotevideos").append(remoteVideo);
             remoteVideos[to] = remoteVideo;
-            remoteVideo.srcObject = event.stream;
+            remoteVideo.srcObject = remoteStreams[to];
             setupOnsizeEvent(remoteVideos[to]);
         }
 
-        pc.onremovestream = handleRemoteStreamRemoved;
-        pc.addStream(localStream);
+        peerConns[to].onremovestream = handleRemoteStreamRemoved;
+        peerConns[to].addStream(localStream);
         if (!isOfferedFrom[to]) {
-          pc.createOffer(
+          peerConns[to].createOffer(
           async (sessionDescription) =>  {
               console.log('setLocalAndSendMessage sending message', sessionDescription);
-              await pc.setLocalDescription(sessionDescription,
+              await peerConns[to].setLocalDescription(sessionDescription,
                 function() {
                     sendMessage({'room':room, 'from':sessionId, 'to': to, 'content': sessionDescription});
                     console.log("Offer setLocalDescription succeeded");
@@ -442,6 +458,7 @@ $( document ).ready(function() {
       for (key in remoteVideos) {
         remoteVideos[key].remove();
         delete remoteVideos[key];
+        delete remoteStreams[key];
       }
       for (key in peerConns) {
         if (peerConns[key]) {
