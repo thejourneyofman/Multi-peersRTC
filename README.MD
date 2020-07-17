@@ -74,9 +74,9 @@ Click 'Add Server' & 'Gather candidates'
 
 Time 	Component 	Type 	Foundation 	Protocol    <Address>   Port 	Priority
 0.010	1	host	0	udp         <Address>   56114	126 | 32512 | 255
-0.011	1	host	3	tcp          <Address>   9	125 | 32704 | 255
+0.011	1	host	3	tcp         <Address>   9	125 | 32704 | 255
 0.014	2	host	0	udp         <Address>   56115	126 | 32512 | 254
-0.015	2	host	3	tcp          <Address>   9	125 | 32704 | 254
+0.015	2	host	3	tcp         <Address>   9	125 | 32704 | 254
 0.383	1	srflx	1	udp         <Address>   56114	100 | 32543 | 255
 0.383	1	relay	2	udp         <Address>   13730	5 | 32543 | 255
 0.413	2	srflx	1	udp         <Address>   56115	100 | 32543 | 254
