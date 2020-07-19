@@ -165,16 +165,19 @@ $( document ).ready(function() {
 
     ////////////////////////////////////////////////////
     let startTime;
-    var pcConfig = {
-      'iceServers': [{
-        'urls': 'stun:stun.l.google.com:19302'
-      },
-      {
-        'urls': 'turn:<Your EC2 Private IPs>:8888?transport=udp',
-        'username': '<username>',
-        'credential': '<credentials>'
-      }]
+
+    // Refer to README.MD to build your own stun and turn server
+    var STUN = {
+        urls: ['stun:stun.l.google.com:19302', 'stun:<Your EC2 Public IPs>:3478']
     };
+
+    var TURN = {
+        url: 'turn:<Your EC2 Public IPs>:5349?transport=udp',
+        username: '<username>',
+        credential: '<credentials>'
+    };
+
+    var pcConfig = {'iceServers':[STUN, TURN]};
 
     var localVideo = document.querySelector('#localVideo');
     var constraints = {
