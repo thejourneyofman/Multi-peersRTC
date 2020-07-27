@@ -2,7 +2,7 @@ textarea {
     border: 0 none white;
     min-width: 600px;
     width: 600px;
-    height: 60px;
+    height: 200px;
     line-height: 24px;
     min-height: 22px;
     overflow-y: scroll;
@@ -106,3 +106,12 @@ div#getUserMedia {
     height: 96px;
   }
 }
+
+.d-table {
+  min-width: 300px;
+  min-height: 200px;
+  background: lightgrey;
+  display: block;
+  width: 1px solid red;
+}
+

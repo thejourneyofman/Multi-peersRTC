@@ -15,9 +15,18 @@
   var room = '{{room}}';
 </script>
 <body>
-
   <h1>Multi-peers Video Conference</h1>
-  <textarea id="messageBox"></textarea>
+  <div class="container">
+    <br><textarea id="messageBox"></textarea>
+    <div class="d-table">
+      <h6>Your local IP addresses:</h6>
+      <ul></ul>
+      <h6>Your public IP addresses:</h6>
+      <ul></ul>
+      <h6>Your IPv6 addresses:</h6>
+      <ul></ul>
+    </div>
+  </div>
   <div class="container">
       <div class="btn-group">
         <button id="startButton">Start</button>

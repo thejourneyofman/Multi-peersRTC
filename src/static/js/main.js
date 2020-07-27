@@ -9,6 +9,7 @@ $( document ).ready(function() {
     var remoteVideos = {};
     var remoteStreams = {};
     var peerConns = {};
+    var ip_dups = {};
 
     const startButton = document.getElementById('startButton');
     const callButton = document.getElementById('callButton');
@@ -308,6 +309,36 @@ $( document ).ready(function() {
     };
 
     /////////////////////////////////////////////////////////
+    // Refer to https://github.com/diafygi/webrtc-ips
+    function showIPs(ip){
+        var li = document.createElement("li");
+        li.textContent = ip;
+
+        //local IPs
+        if (ip.match(/^(192\.168\.|169\.254\.|10\.|172\.(1[6-9]|2\d|3[01]))/))
+            document.getElementsByTagName("ul")[0].appendChild(li);
+
+        //IPv6 addresses
+        else if (ip.match(/^[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7}$/))
+            document.getElementsByTagName("ul")[2].appendChild(li);
+
+        //assume the rest are public IPs
+        else
+            document.getElementsByTagName("ul")[1].appendChild(li);
+    }
+
+    // Refer to https://github.com/diafygi/webrtc-ips
+    function handleCandidate(candidate){
+        //match just the IP address
+        var ip_regex = /([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/
+        var ip_addr = ip_regex.exec(candidate)[1];
+
+        //remove duplicates
+        if(ip_dups[ip_addr] === undefined)
+            showIPs(ip_addr);
+
+        ip_dups[ip_addr] = true;
+    }
 
     function createPeerConnection(to) {
       if (peerConns[to] !== null) {
@@ -328,6 +359,7 @@ $( document ).ready(function() {
                      candidate: event.candidate.candidate
                   }
                 });
+                handleCandidate(event.candidate.candidate);
             } else {
                 console.log('End of candidates.');
             }
